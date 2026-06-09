@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Formify – Convert Any Proforma to Editable Form</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f2;
+      color: #222;
+      min-height: 100vh;
+    }
+
+    /* HEADER */
+    header {
+      background: #5a7a2e;
+      color: white;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo { font-size: 22px; font-weight: bold; letter-spacing: 1px; }
+    .logo span { color: #c8e89a; }
+    .tagline { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+
+    /* MAIN */
+    main { max-width: 760px; margin: 0 auto; padding: 32px 16px; }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .hero h1 { font-size: 22px; color: #3a5a1e; margin-bottom: 6px; }
+    .hero p  { font-size: 14px; color: #555; line-height: 1.6; }
+
+    /* UPLOAD CARD */
+    .card {
+      background: white;
+      border-radius: 10px;
+      padding: 28px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 24px;
+    }
+
+    .upload-zone {
+      border: 2px dashed #5a7a2e;
+      border-radius: 8px;
+      padding: 36px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.2s;
+      position: relative;
+    }
+    .upload-zone:hover { background: #f0f7e8; }
+    .upload-zone.dragover { background: #e4f0d4; border-color: #3a5a1e; }
+
+    .upload-zone input[type=file] {
+      position: absolute; inset: 0;
+      opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .upload-icon { font-size: 40px; margin-bottom: 10px; }
+    .upload-zone p { font-size: 14px; color: #555; margin: 4px 0; }
+    .upload-zone .supported { font-size: 12px; color: #888; margin-top: 6px; }
+
+    .preview-wrap {
+      display: none;
+      align-items: center;
+      gap: 14px;
+      margin-top: 16px;
+      padding: 12px;
+      background: #f8faf4;
+      border-radius: 8px;
+      border: 1px solid #d0e4b0;
+    }
+    .preview-wrap img {
+      width: 60px; height: 60px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    .preview-wrap .file-info { flex: 1; }
+    .preview-wrap .file-name { font-size: 13px; font-weight: bold; color: #3a5a1e; word-break: break-all; }
+    .preview-wrap .file-size { font-size: 12px; color: #888; margin-top: 2px; }
+    .remove-btn {
+      background: none; border: none;
+      font-size: 18px; cursor: pointer;
+      color: #888; padding: 4px;
+    }
+    .remove-btn:hover { color: #c00; }
+
+    .convert-btn {
+      display: block;
+      width: 100%;
+      margin-top: 18px;
+      padding: 13px;
+      background: #5a7a2e;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: Arial, sans-serif;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.2s;
+    }
+    .convert-btn:hover:not(:disabled) { background: #486523; }
+    .convert-btn:disabled { background: #aaa; cursor: not-allowed; }
+
+    /* PROGRESS */
+    .progress-wrap { display: none; margin-top: 18px; }
+    .progress-bar-bg {
+      background: #e0e0e0; border-radius: 20px;
+      height: 8px; overflow: hidden; margin-bottom: 8px;
+    }
+    .progress-bar {
+      height: 100%; background: #5a7a2e;
+      border-radius: 20px;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+    .progress-msg { font-size: 13px; color: #555; text-align: center; }
+
+    /* ERROR */
+    .error-box {
+      display: none;
+      background: #fff0f0;
+      border: 1px solid #ffaaaa;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #cc0000;
+      margin-top: 14px;
+    }
+
+    /* RESULT */
+    .result-card {
+      display: none;
+      background: white;
+      border-radius: 10px;
+      padding: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 24px;
+    }
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .result-header h2 { font-size: 16px; color: #3a5a1e; }
+    .result-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .btn-outline {
+      padding: 8px 16px;
+      border: 1.5px solid #5a7a2e;
+      background: white;
+      color: #5a7a2e;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: Arial, sans-serif;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.2s;
+    }
+    .btn-outline:hover { background: #5a7a2e; color: white; }
+
+    .btn-solid {
+      padding: 8px 16px;
+      border: none;
+      background: #5a7a2e;
+      color: white;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: Arial, sans-serif;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.2s;
+    }
+    .btn-solid:hover { background: #486523; }
+
+    .form-preview-frame {
+      width: 100%;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      min-height: 500px;
+      background: #fafafa;
+    }
+
+    .convert-another {
+      display: block;
+      text-align: center;
+      margin-top: 12px;
+      font-size: 13px;
+      color: #5a7a2e;
+      cursor: pointer;
+      text-decoration: underline;
+      background: none;
+      border: none;
+      font-family: Arial, sans-serif;
+    }
+
+    /* HOW IT WORKS */
+    .how-it-works {
+      background: white;
+      border-radius: 10px;
+      padding: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 24px;
+    }
+    .how-it-works h2 { font-size: 16px; color: #3a5a1e; margin-bottom: 16px; }
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; }
+    .step { text-align: center; }
+    .step-icon { font-size: 28px; margin-bottom: 6px; }
+    .step-title { font-size: 13px; font-weight: bold; color: #3a5a1e; margin-bottom: 3px; }
+    .step-desc { font-size: 12px; color: #666; line-height: 1.5; }
+
+    /* FEEDBACK */
+    .feedback-card {
+      background: white;
+      border-radius: 10px;
+      padding: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 24px;
+    }
+    .feedback-card h2 { font-size: 16px; color: #3a5a1e; margin-bottom: 14px; }
+    .feedback-card input,
+    .feedback-card textarea {
+      width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 9px 12px;
+      font-size: 13px;
+      font-family: Arial, sans-serif;
+      margin-bottom: 10px;
+      outline: none;
+    }
+    .feedback-card input:focus,
+    .feedback-card textarea:focus { border-color: #5a7a2e; }
+    .feedback-card textarea { resize: vertical; min-height: 80px; }
+    .feedback-sent { display: none; font-size: 13px; color: #5a7a2e; font-weight: bold; margin-top: 8px; }
+
+    /* FOOTER */
+    footer {
+      text-align: center;
+      padding: 16px;
+      font-size: 12px;
+      color: #888;
+    }
+    footer a { color: #5a7a2e; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">Form<span>ify</span></div>
+    <div class="tagline">Convert any proforma into an editable form — instantly</div>
+  </div>
+  <div style="font-size:12px;opacity:0.8">by Rathore's Academy</div>
+</header>
+
+<main>
+
+  <div class="hero">
+    <h1>Upload any school proforma — get an editable HTML form</h1>
+    <p>Report cards, fee receipts, admit cards, attendance sheets, leave forms — any document.<br>
+    AI reads the layout and creates a ready-to-fill, printable form for your teachers.</p>
+  </div>
+
+  <!-- UPLOAD CARD -->
+  <div class="card">
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.webp,.pdf" />
+      <div class="upload-icon">📄</div>
+      <p><strong>Click to upload or drag & drop</strong></p>
+      <p>Any proforma image or PDF</p>
+      <p class="supported">Supported: PNG, JPG, WEBP, PDF &nbsp;|&nbsp; Max size: 16MB</p>
+    </div>
+
+    <div class="preview-wrap" id="previewWrap">
+      <img id="previewImg" src="" alt="preview" />
+      <div class="file-info">
+        <div class="file-name" id="fileName"></div>
+        <div class="file-size" id="fileSize"></div>
+      </div>
+      <button class="remove-btn" id="removeBtn" title="Remove file">✕</button>
+    </div>
+
+    <button class="convert-btn" id="convertBtn" disabled>
+      ✨ Convert to Editable Form
+    </button>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-bar-bg"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="progress-msg" id="progressMsg">Reading your proforma...</div>
+    </div>
+
+    <div class="error-box" id="errorBox"></div>
+  </div>
+
+  <!-- RESULT -->
+  <div class="result-card" id="resultCard">
+    <div class="result-header">
+      <h2>✅ Your editable form is ready!</h2>
+      <div class="result-actions">
+        <button class="btn-outline" id="printBtn">🖨️ Print Form</button>
+        <button class="btn-solid" id="downloadBtn">⬇️ Download HTML</button>
+      </div>
+    </div>
+    <iframe class="form-preview-frame" id="formFrame" title="Generated Form Preview"></iframe>
+    <button class="convert-another" id="convertAnother">↩ Convert another proforma</button>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <div class="how-it-works">
+    <h2>How Formify works</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-icon">📸</div>
+        <div class="step-title">Upload</div>
+        <div class="step-desc">Upload a photo or scan of any proforma — image or PDF</div>
+      </div>
+      <div class="step">
+        <div class="step-icon">🤖</div>
+        <div class="step-title">AI Reads</div>
+        <div class="step-desc">AI understands the layout — tables, fields, headings, labels</div>
+      </div>
+      <div class="step">
+        <div class="step-icon">📝</div>
+        <div class="step-title">Form Generated</div>
+        <div class="step-desc">A clean editable HTML form is created matching your proforma</div>
+      </div>
+      <div class="step">
+        <div class="step-icon">🖨️</div>
+        <div class="step-title">Fill & Print</div>
+        <div class="step-desc">Teachers fill data online and print — no software needed</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FEEDBACK -->
+  <div class="feedback-card">
+    <h2>💬 Share your feedback</h2>
+    <input type="text" id="fbName" placeholder="Your name" />
+    <input type="text" id="fbEmail" placeholder="Your email (optional)" />
+    <textarea id="fbMessage" placeholder="How was your experience? Any suggestions?"></textarea>
+    <button class="btn-solid" id="fbSubmit" style="width:100%">Send Feedback</button>
+    <div class="feedback-sent" id="feedbackSent">✅ Thank you! Feedback received.</div>
+  </div>
+
+</main>
+
+<footer>
+  Made with ❤️ by <a href="https://rathoresacademy.wordpress.com" target="_blank">Rathore's Academy</a> &nbsp;|&nbsp;
+  Free tool for Indian teachers
+</footer>
+
+<script>
+  let selectedFile = null;
+  let generatedHTML = '';
+
+  const fileInput    = document.getElementById('fileInput');
+  const uploadZone   = document.getElementById('uploadZone');
+  const previewWrap  = document.getElementById('previewWrap');
+  const previewImg   = document.getElementById('previewImg');
+  const fileNameEl   = document.getElementById('fileName');
+  const fileSizeEl   = document.getElementById('fileSize');
+  const removeBtn    = document.getElementById('removeBtn');
+  const convertBtn   = document.getElementById('convertBtn');
+  const progressWrap = document.getElementById('progressWrap');
+  const progressBar  = document.getElementById('progressBar');
+  const progressMsg  = document.getElementById('progressMsg');
+  const errorBox     = document.getElementById('errorBox');
+  const resultCard   = document.getElementById('resultCard');
+  const formFrame    = document.getElementById('formFrame');
+  const downloadBtn  = document.getElementById('downloadBtn');
+  const printBtn     = document.getElementById('printBtn');
+  const convertAnother = document.getElementById('convertAnother');
+
+  // Drag and drop
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) handleFile(fileInput.files[0]);
+  });
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+    return (bytes/(1024*1024)).toFixed(1) + ' MB';
+  }
+
+  function handleFile(file) {
+    selectedFile = file;
+    fileNameEl.textContent = file.name;
+    fileSizeEl.textContent = formatBytes(file.size);
+
+    // Preview image
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = e => { previewImg.src = e.target.result; };
+      reader.readAsDataURL(file);
+      previewImg.style.display = 'block';
+    } else {
+      previewImg.src = '';
+      previewImg.style.display = 'none';
+    }
+
+    previewWrap.style.display = 'flex';
+    convertBtn.disabled = false;
+    errorBox.style.display = 'none';
+    resultCard.style.display = 'none';
+  }
+
+  removeBtn.addEventListener('click', () => {
+    selectedFile = null;
+    fileInput.value = '';
+    previewWrap.style.display = 'none';
+    convertBtn.disabled = true;
+    errorBox.style.display = 'none';
+  });
+
+  // Progress messages
+  const messages = [
+    "Reading your proforma...",
+    "Analysing layout and fields...",
+    "Identifying tables and labels...",
+    "Generating editable form...",
+    "Almost ready..."
+  ];
+  let msgIndex = 0;
+  let msgInterval = null;
+  let progressValue = 0;
+  let progressInterval = null;
+
+  function startProgress() {
+    progressWrap.style.display = 'block';
+    progressBar.style.width = '0%';
+    progressValue = 0;
+    msgIndex = 0;
+    progressMsg.textContent = messages[0];
+
+    progressInterval = setInterval(() => {
+      if (progressValue < 85) {
+        progressValue += Math.random() * 8;
+        progressBar.style.width = Math.min(progressValue, 85) + '%';
+      }
+    }, 600);
+
+    msgInterval = setInterval(() => {
+      msgIndex = (msgIndex + 1) % messages.length;
+      progressMsg.textContent = messages[msgIndex];
+    }, 2500);
+  }
+
+  function stopProgress(success) {
+    clearInterval(progressInterval);
+    clearInterval(msgInterval);
+    progressBar.style.width = success ? '100%' : '0%';
+    progressMsg.textContent = success ? 'Done!' : '';
+    setTimeout(() => { progressWrap.style.display = 'none'; }, 800);
+  }
+
+  convertBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+
+    convertBtn.disabled = true;
+    errorBox.style.display = 'none';
+    resultCard.style.display = 'none';
+    startProgress();
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      const resp = await fetch('/convert', { method: 'POST', body: formData });
+      const data = await resp.json();
+
+      if (!resp.ok || data.error) {
+        throw new Error(data.error || 'Conversion failed');
+      }
+
+      generatedHTML = data.html;
+      stopProgress(true);
+
+      // Show in iframe
+      const blob = new Blob([generatedHTML], { type: 'text/html' });
+      formFrame.src = URL.createObjectURL(blob);
+      resultCard.style.display = 'block';
+      resultCard.scrollIntoView({ behavior: 'smooth' });
+
+    } catch (err) {
+      stopProgress(false);
+      errorBox.textContent = '⚠️ ' + err.message;
+      errorBox.style.display = 'block';
+      convertBtn.disabled = false;
+    }
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!generatedHTML) return;
+    const blob = new Blob([generatedHTML], { type: 'text/html' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const baseName = selectedFile ? selectedFile.name.replace(/\.[^.]+$/, '') : 'formify_form';
+    a.download = baseName + '_editable.html';
+    a.click();
+  });
+
+  printBtn.addEventListener('click', () => {
+    formFrame.contentWindow.print();
+  });
+
+  convertAnother.addEventListener('click', () => {
+    selectedFile = null;
+    fileInput.value = '';
+    previewWrap.style.display = 'none';
+    convertBtn.disabled = true;
+    resultCard.style.display = 'none';
+    generatedHTML = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // Feedback
+  document.getElementById('fbSubmit').addEventListener('click', async () => {
+    const name = document.getElementById('fbName').value.trim();
+    const email = document.getElementById('fbEmail').value.trim();
+    const message = document.getElementById('fbMessage').value.trim();
+    if (!message) return;
+    await fetch('/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, message })
+    });
+    document.getElementById('feedbackSent').style.display = 'block';
+    document.getElementById('fbName').value = '';
+    document.getElementById('fbEmail').value = '';
+    document.getElementById('fbMessage').value = '';
+  });
+</script>
+
+</body>
+</html>
