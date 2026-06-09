@@ -538,16 +538,25 @@
     const name = document.getElementById('fbName').value.trim();
     const email = document.getElementById('fbEmail').value.trim();
     const message = document.getElementById('fbMessage').value.trim();
-    if (!message) return;
-    await fetch('/feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, message })
-    });
-    document.getElementById('feedbackSent').style.display = 'block';
+    if (!message) { alert('Please write a message before submitting.'); return; }
+    const btn = document.getElementById('fbSubmit');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    try {
+      await fetch('/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, message })
+      });
+    } catch(e) {}
     document.getElementById('fbName').value = '';
     document.getElementById('fbEmail').value = '';
     document.getElementById('fbMessage').value = '';
+    const sent = document.getElementById('feedbackSent');
+    sent.style.display = 'block';
+    btn.textContent = 'Send Feedback';
+    btn.disabled = false;
+    setTimeout(() => { sent.style.display = 'none'; }, 4000);
   });
 </script>
 
