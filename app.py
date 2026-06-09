@@ -24,10 +24,9 @@ def image_to_base64(image: Image.Image) -> str:
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 def pdf_to_base64_image(pdf_bytes: bytes) -> str:
-    """Convert first page of PDF to base64 PNG using PyMuPDF — no poppler needed."""
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     page = doc[0]
-    mat = fitz.Matrix(2.0, 2.0)  # 2x zoom = ~144 DPI
+    mat = fitz.Matrix(2.0, 2.0)
     pix = page.get_pixmap(matrix=mat)
     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
     return image_to_base64(img)
@@ -40,46 +39,50 @@ def file_to_base64(file_bytes: bytes, filename: str) -> str:
         image = Image.open(io.BytesIO(file_bytes)).convert("RGB")
         return image_to_base64(image)
 
-SYSTEM_PROMPT = """You are an expert at converting scanned proforma images into clean, editable HTML forms.
+SYSTEM_PROMPT = """You are an expert at converting scanned school proforma images into clean, editable HTML forms.
 
-When given an image of any proforma (report card, fee receipt, admit card, attendance sheet, leave form, certificate, or any school/office document), you must:
+TASK: Convert the uploaded proforma image into a complete standalone HTML file that looks like the original and is fully editable by teachers.
 
-1. ANALYZE the image carefully — identify all:
-   - Headings and subheadings
-   - Labels and their corresponding input fields
-   - Tables (preserve exact rows, columns, merged cells)
-   - Checkboxes, dropdowns, or select fields
-   - Static text that should not be editable
-   - Logos or image placeholder areas
+=== CRITICAL RULES — FOLLOW EXACTLY ===
 
-2. GENERATE a complete, standalone HTML file that:
-   - Perfectly mirrors the visual layout of the original proforma
-   - Uses a cream/off-white background (#fffff0) matching typical school proformas
-   - Has a green border (#5a7a2e) around the page if the original has a border
-   - Makes every blank line, empty box, or fill-in area into an editable <input> or <textarea>
-   - Keeps all static text (labels, headings, instructions) as plain HTML text — NOT editable
-   - Uses tables to replicate table layouts exactly
-   - Uses Arial font throughout
-   - Red color (#8b0000) for headings and section titles
-   - Has a Print button (hidden during print) that calls window.print()
-   - Is fully self-contained — no external CSS, no external JS, no CDN links
-   - Works offline in any browser
+RULE 1 — EVERY EMPTY CELL/FIELD MUST BE EDITABLE:
+- ANY table cell that is blank or empty in the image → put <input type="text" style="width:100%;border:none;border-bottom:1px solid #aaa;background:transparent;font-size:12px;font-family:Arial;outline:none;padding:2px;">
+- ANY blank line after a label → <input type="text">
+- ANY large empty box or text area → <textarea rows="2" style="width:100%;border:none;border-bottom:1px solid #aaa;background:transparent;font-size:12px;font-family:Arial;outline:none;resize:vertical;">
+- Grade/class fields → <select> with options A,B,C,D,E
+- Date fields → <input type="date">
+- DO NOT leave any blank cell empty — every single blank cell needs an input field inside it
 
-3. HTML RULES:
-   - All CSS must be inside a <style> tag in <head>
-   - Input fields: border:none; border-bottom:1px solid #888; background:transparent; font-family:Arial; font-size:13px; outline:none;
-   - Input fields on focus: border-bottom-color:#5a7a2e
-   - Table cells that need input: put <input type="text"> inside the <td>
-   - Large text areas: use <textarea> with resize:vertical
-   - For grade/option fields with limited choices: use <select> with appropriate <option> values
-   - Page width: max 680px centered on screen
-   - Print media query: hide print button, keep all borders and inputs visible
+RULE 2 — TABLE STYLING:
+- ALL table borders: border:1px solid #c8b96e (golden/olive color matching school proformas)
+- Table background: #fffff0 (cream)
+- Header cells (Activity, Class, Grade, Subject etc): background:#f5f0d8; color:#8b0000; font-weight:bold; text-align:center;
+- NO red borders anywhere — use #c8b96e for all table borders
+- border-collapse:collapse on all tables
 
-4. OUTPUT RULES:
-   - Output ONLY the complete HTML code
-   - Start with <!DOCTYPE html>
-   - No explanation, no markdown, no code fences
-   - The HTML must be complete and functional as-is
+RULE 3 — PAGE STYLING:
+- Page background: #fffff0 (cream/off-white)
+- Outer border of the full page: 4px solid #5a7a2e (green)
+- Max width: 680px, centered on screen, padding: 24px
+- Font: Arial throughout
+- Headings/section titles: color:#8b0000 (dark red), bold
+
+RULE 4 — STATIC TEXT (NOT EDITABLE):
+- Column headers like "Activity", "Class", "Descriptive Indicators", "Grade" → plain text, NOT input
+- Labels like "Name:", "Date:", "Place:" → plain text label, then input next to it
+- Instructional text at bottom (footnotes, formulas) → plain text, NOT editable
+- Pre-filled values like "IX", "X", "Delhi" → keep as plain text or pre-filled input value
+
+RULE 5 — PRINT BUTTON:
+- Add a green Print button at top: <button onclick="window.print()" style="...">Print</button>
+- Hide it during print with @media print { .no-print { display:none; } }
+- All inputs and borders must remain visible when printing
+
+RULE 6 — OUTPUT FORMAT:
+- Output ONLY raw HTML starting with <!DOCTYPE html>
+- NO markdown, NO code fences, NO explanation
+- Complete self-contained file, no external dependencies
+- Must work offline in any browser
 """
 
 def generate_form(base64_image: str) -> str:
@@ -97,20 +100,26 @@ def generate_form(base64_image: str) -> str:
                     },
                     {
                         "type": "text",
-                        "text": "Convert this proforma image into a complete editable HTML form. Follow all rules exactly. Output only the HTML code, nothing else."
+                        "text": """Convert this proforma image into a complete editable HTML form.
+
+IMPORTANT REMINDERS:
+1. Every blank/empty table cell MUST have an <input type="text"> inside it
+2. Use border:1px solid #c8b96e for ALL table borders — NO red borders
+3. Page must have green outer border (#5a7a2e) and cream background (#fffff0)
+4. Output ONLY the HTML code — no markdown, no explanation, start with <!DOCTYPE html>"""
                     }
                 ]
             }
         ],
         max_tokens=8000,
-        temperature=0.2
+        temperature=0.1
     )
     html = response.choices[0].message.content.strip()
     # Strip markdown code fences if model adds them
     if html.startswith("```"):
         lines = html.split("\n")
-        lines = lines[1:]  # remove first ```html line
-        if lines[-1].strip() == "```":
+        lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
             lines = lines[:-1]
         html = "\n".join(lines).strip()
     return html
