@@ -1,17 +1,43 @@
 import os
 import base64
-import smtplib
-from email.mime.text import MIMEText
 from flask import Flask, request, jsonify, render_template
 from groq import Groq
 from PIL import Image
 import fitz  # PyMuPDF
 import io
+import psycopg2
+from datetime import datetime
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+# Database setup
+def get_db():
+    return psycopg2.connect(os.environ.get("DATABASE_URL"), sslmode="require")
+
+def init_db():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS formify_feedback (
+                id SERIAL PRIMARY KEY,
+                name TEXT,
+                email TEXT,
+                message TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("DB initialized OK")
+    except Exception as e:
+        print(f"DB init error: {e}")
+
+init_db()
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'pdf'}
 
@@ -124,22 +150,20 @@ IMPORTANT REMINDERS:
         html = "\n".join(lines).strip()
     return html
 
-def send_feedback_email(name: str, email: str, message: str):
-    mail_user = os.environ.get("MAIL_USER")
-    mail_pass = os.environ.get("MAIL_PASS")
-    if not mail_user or not mail_pass:
-        return
-    body = f"Formify Feedback\n\nFrom: {name}\nEmail: {email}\n\nMessage:\n{message}"
-    msg = MIMEText(body)
-    msg["Subject"] = f"Formify Feedback from {name}"
-    msg["From"] = mail_user
-    msg["To"] = "prathoreofficial@gmail.com"
+def save_feedback(name: str, email: str, message: str):
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(mail_user, mail_pass)
-            server.sendmail(mail_user, "prathoreofficial@gmail.com", msg.as_string())
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO formify_feedback (name, email, message) VALUES (%s, %s, %s)",
+            (name, email, message)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        print(f"Feedback saved from {name}")
     except Exception as e:
-        print(f"Email error: {e}")
+        print(f"DB save error: {e}")
 
 @app.route("/")
 def index():
@@ -165,12 +189,38 @@ def convert():
 @app.route("/feedback", methods=["POST"])
 def feedback():
     data = request.get_json()
-    send_feedback_email(
+    save_feedback(
         data.get("name", "Anonymous"),
         data.get("email", ""),
         data.get("message", "")
     )
     return jsonify({"status": "ok"})
+
+@app.route("/admin/feedback")
+def admin_feedback():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT name, email, message, created_at FROM formify_feedback ORDER BY created_at DESC")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        html = """<html><head><title>Formify Feedback</title>
+        <style>body{font-family:Arial;padding:24px;max-width:800px;margin:0 auto}
+        h1{color:#8b0000}table{width:100%;border-collapse:collapse;margin-top:16px}
+        th{background:#5a7a2e;color:white;padding:10px;text-align:left}
+        td{padding:10px;border-bottom:1px solid #ddd;vertical-align:top}
+        tr:hover{background:#f9f9f9}.count{color:#555;font-size:14px;margin-top:4px}
+        </style></head><body>
+        <h1>Formify Feedback</h1>"""
+        html += f'<p class="count">Total responses: {len(rows)}</p>'
+        html += "<table><tr><th>Name</th><th>Email</th><th>Message</th><th>Date</th></tr>"
+        for row in rows:
+            html += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{str(row[3])[:16]}</td></tr>"
+        html += "</table></body></html>"
+        return html
+    except Exception as e:
+        return f"Error: {e}", 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
